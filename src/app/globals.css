@@ -2,6 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Neulis Neue — broadcast brand font (3 weights). Self-hosted so the
+ * fonts are available with no external network during the live show. */
+@font-face {
+  font-family: "Neulis Neue";
+  src: url("/fonts/Neulis_Neue_Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Neulis Neue";
+  src: url("/fonts/Neulis_Neue_Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Neulis Neue";
+  src: url("/fonts/Neulis_Neue_Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 /*
  * Eurovision-adjacent palette
  * Deep navy base, gold/amber accents, hot pink highlights

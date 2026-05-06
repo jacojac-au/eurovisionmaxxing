@@ -41,7 +41,12 @@ export default function ThemeToggle() {
   // the TV surface stays force-dark regardless of admin preference.
   // The pathname check is conservative: any path containing /present
   // is treated as the TV surface.
+  // OBS overlays are also suppressed — they go into a Browser Source
+  // and any chrome floating over them ends up burned into the broadcast.
   if (pathname?.endsWith("/present") || pathname?.includes("/present/")) {
+    return null;
+  }
+  if (pathname?.includes("/overlay")) {
     return null;
   }
 

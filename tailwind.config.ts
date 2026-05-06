@@ -32,7 +32,7 @@ const config: Config = {
         navy: "var(--navy)",
       },
       fontFamily: {
-        sans: ["var(--font-geist-sans)", "system-ui", "sans-serif"],
+        sans: ["Neulis Neue", "var(--font-geist-sans)", "system-ui", "sans-serif"],
       },
       keyframes: {
         "score-pop": {
@@ -48,6 +48,23 @@ const config: Config = {
           "0%": { opacity: "0", transform: "translateY(8px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
+        "slide-in-left": {
+          "0%": { opacity: "0", transform: "translateX(-60px)" },
+          "100%": { opacity: "1", transform: "translateX(0)" },
+        },
+        "slide-in-right": {
+          "0%": { opacity: "0", transform: "translateX(60px)" },
+          "100%": { opacity: "1", transform: "translateX(0)" },
+        },
+        "pop-in": {
+          "0%": { opacity: "0", transform: "scale(0.6)" },
+          "60%": { opacity: "1", transform: "scale(1.05)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
+        "header-rise": {
+          "0%": { opacity: "0", transform: "translateY(-24px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
         shimmer: {
           "0%": { backgroundPosition: "-200% 0" },
           "100%": { backgroundPosition: "200% 0" },
@@ -57,6 +74,10 @@ const config: Config = {
         "score-pop": "score-pop 0.3s ease-out",
         "rank-shift": "rank-shift 0.3s ease-out",
         "fade-in": "fade-in 0.3s ease-out",
+        "slide-in-left": "slide-in-left 0.6s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "slide-in-right": "slide-in-right 0.6s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "pop-in": "pop-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both",
+        "header-rise": "header-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both",
         shimmer: "shimmer 2s infinite linear",
       },
     },

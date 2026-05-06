@@ -80,6 +80,15 @@ export interface VotingViewProps {
     eligibleVoterCount: number;
     allEligibleAllDone: boolean;
   };
+  /**
+   * Broadcast-mode lock. When the room admin has set a now-performing
+   * contestant (and `allow_now_performing` is on), guests cannot navigate
+   * past that contestant in running order — they stay locked at-or-before
+   * the live performance. Departs from SPEC §6.5's "opt-in jump pill, not
+   * forced snap" because broadcast hosts want everyone in lockstep.
+   */
+  nowPerformingId?: string | null;
+  allowNowPerforming?: boolean;
 }
 
 function getPersistentStorage() {
@@ -113,11 +122,23 @@ export default function VotingView({
   scoredByCounts,
   roomMemberTotal,
   roomCompletion,
+  nowPerformingId,
+  allowNowPerforming,
 }: VotingViewProps) {
   const sortedContestants = useMemo(
     () => [...contestants].sort((a, b) => a.runningOrder - b.runningOrder),
     [contestants]
   );
+
+  // Broadcast-mode lock (§6.5 override). When the admin has set a
+  // now-performing contestant on a room with allow_now_performing=true,
+  // guests cannot navigate past that index. -1 means lock is off.
+  const nowPerformingIdx = useMemo(() => {
+    if (!allowNowPerforming || !nowPerformingId) return -1;
+    return sortedContestants.findIndex((c) => c.id === nowPerformingId);
+  }, [allowNowPerforming, nowPerformingId, sortedContestants]);
+  const lockActive = nowPerformingIdx >= 0;
+  const maxAdvanceIdx = lockActive ? nowPerformingIdx : sortedContestants.length - 1;
 
   const [idx, setIdx] = useState<number>(() => {
     if (!roomId || !userId) return 0;
@@ -205,12 +226,12 @@ export default function VotingView({
       if (startX === null) return;
       const endX = e.changedTouches[0]?.clientX ?? startX;
       const next = nextIdxFromSwipe(idx, sortedContestants.length, endX - startX);
-      if (next !== null) {
+      if (next !== null && next <= maxAdvanceIdx) {
         hintExpansion.onNavigated();
         setIdx(next);
       }
     },
-    [idx, sortedContestants.length, hintExpansion]
+    [idx, sortedContestants.length, hintExpansion, maxAdvanceIdx]
   );
 
   useEffect(() => {
@@ -227,12 +248,11 @@ export default function VotingView({
           return;
         }
       }
-      const total = sortedContestants.length;
       if (e.key === "ArrowLeft" && idx > 0) {
         hintExpansion.onNavigated();
         setIdx(idx - 1);
         e.preventDefault();
-      } else if (e.key === "ArrowRight" && idx < total - 1) {
+      } else if (e.key === "ArrowRight" && idx < maxAdvanceIdx) {
         hintExpansion.onNavigated();
         setIdx(idx + 1);
         e.preventDefault();
@@ -343,7 +363,7 @@ export default function VotingView({
   const nonUniformWeights = categories.some((c) => c.weight !== firstWeight);
 
   const canPrev = idx > 0;
-  const canNext = idx < totalContestants - 1;
+  const canNext = idx < maxAdvanceIdx;
 
   const isMissed = !!missedByContestant[contestant.id];
 
@@ -503,7 +523,7 @@ export default function VotingView({
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => { hintExpansion.onNavigated(); setIdx((i) => Math.min(totalContestants - 1, i + 1)); }}
+            onClick={() => { hintExpansion.onNavigated(); setIdx((i) => Math.min(maxAdvanceIdx, i + 1)); }}
             disabled={!canNext}
             aria-label="Next contestant"
             className="flex flex-col items-center gap-0.5 py-2 leading-tight"
@@ -522,9 +542,10 @@ export default function VotingView({
           categoryNames={categoryNames}
           scoredByCounts={scoredByCounts}
           roomMemberTotal={roomMemberTotal}
+          maxAdvanceIdx={lockActive ? maxAdvanceIdx : undefined}
           onSelect={(id) => {
             const target = sortedContestants.findIndex((c) => c.id === id);
-            if (target >= 0) {
+            if (target >= 0 && target <= maxAdvanceIdx) {
               hintExpansion.onNavigated();
               setIdx(target);
             }

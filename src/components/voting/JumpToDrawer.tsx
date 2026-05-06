@@ -21,6 +21,12 @@ export interface JumpToDrawerProps {
   scoredByCounts?: Record<string, number>;
   /** Total room members. When undefined or 0, the chip is suppressed. */
   roomMemberTotal?: number;
+  /**
+   * Broadcast-mode lock — see VotingView. When set, contestants whose
+   * runningOrder index exceeds this are rendered greyed-out and not
+   * selectable. Falsey values disable the lock.
+   */
+  maxAdvanceIdx?: number;
 }
 
 const STATUS_LABEL: Record<ContestantStatus, string> = {
@@ -46,6 +52,7 @@ export default function JumpToDrawer({
   onClose,
   scoredByCounts,
   roomMemberTotal,
+  maxAdvanceIdx,
 }: JumpToDrawerProps) {
   const currentRowRef = useRef<HTMLLIElement>(null);
 
@@ -87,7 +94,7 @@ export default function JumpToDrawer({
           </button>
         </div>
         <ul className="flex-1 overflow-y-auto py-1">
-          {contestants.map((c) => {
+          {contestants.map((c, i) => {
             const status = summarizeContestantStatus(
               c.id,
               scoresByContestant,
@@ -95,6 +102,8 @@ export default function JumpToDrawer({
               categoryNames
             );
             const isCurrent = c.id === currentContestantId;
+            const locked =
+              typeof maxAdvanceIdx === "number" && i > maxAdvanceIdx;
             return (
               <li
                 key={c.id}
@@ -104,7 +113,12 @@ export default function JumpToDrawer({
                 <button
                   type="button"
                   onClick={() => onSelect(c.id)}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  disabled={locked}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
+                    locked
+                      ? "cursor-not-allowed opacity-40"
+                      : "hover:bg-muted/60"
+                  }`}
                 >
                   <span className="font-mono text-xs text-muted-foreground tabular-nums w-8 flex-shrink-0">
                     {c.runningOrder}.

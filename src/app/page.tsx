@@ -1,57 +1,120 @@
-import Link from "next/link";
-import { getTranslations } from "next-intl/server";
-import Logo from "@/components/ui/Logo";
+"use client";
 
-export default async function HomePage() {
-  const t = await getTranslations("common");
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { getSession } from "@/lib/session";
+
+interface ActiveRoomResponse {
+  activeRoom: {
+    id: string;
+    pin: string;
+    status: string;
+    year: number;
+    event: string;
+  } | null;
+}
+
+type Phase =
+  | { kind: "loading" }
+  | { kind: "no_active" }
+  | { kind: "joining"; roomId: string }
+  | { kind: "error"; message: string };
+
+/**
+ * Root entry point — single-active-room flow. Behaviour:
+ *
+ * 1. No session → redirect to /onboard?next=/ so we land back here after.
+ * 2. Session + active room → join (idempotent) and redirect to that room.
+ * 3. Session + no active room → "Waiting for the show…" copy, polls every
+ *    3s and auto-redirects when the host marks a room. No admin chrome
+ *    shown to guests.
+ */
+export default function HomePage() {
+  const router = useRouter();
+  const [phase, setPhase] = useState<Phase>({ kind: "loading" });
+  const sessionRef = useRef<ReturnType<typeof getSession>>(null);
+
+  const tryActivate = useCallback(async () => {
+    const session = sessionRef.current;
+    if (!session) return;
+    try {
+      const res = await fetch("/api/active-room", { cache: "no-store" });
+      if (!res.ok) {
+        setPhase({ kind: "error", message: `HTTP ${res.status}` });
+        return;
+      }
+      const body = (await res.json()) as ActiveRoomResponse;
+      if (!body.activeRoom) {
+        setPhase((prev) =>
+          prev.kind === "no_active" ? prev : { kind: "no_active" }
+        );
+        return;
+      }
+      const roomId = body.activeRoom.id;
+      setPhase({ kind: "joining", roomId });
+
+      // Idempotent join — the room page handles auth errors with a clearer
+      // recovery path than the home page.
+      try {
+        await fetch(`/api/rooms/${encodeURIComponent(roomId)}/join`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: session.userId }),
+        });
+      } catch {
+        /* swallow */
+      }
+      router.replace(`/room/${encodeURIComponent(roomId)}`);
+    } catch (e) {
+      setPhase({ kind: "error", message: String(e) });
+    }
+  }, [router]);
+
+  useEffect(() => {
+    const session = getSession();
+    if (!session) {
+      router.replace("/onboard?next=/");
+      return;
+    }
+    sessionRef.current = session;
+    void tryActivate();
+    // Poll while no active room — guests on the empty-state screen jump in
+    // automatically once the host marks one.
+    const id = window.setInterval(() => {
+      void tryActivate();
+    }, 3000);
+    return () => window.clearInterval(id);
+  }, [router, tryActivate]);
+
+  if (phase.kind === "loading" || phase.kind === "joining") {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center px-6 py-12">
+        <p className="text-lg text-muted-foreground motion-safe:animate-shimmer">
+          {phase.kind === "joining" ? "Joining the room…" : "…"}
+        </p>
+      </main>
+    );
+  }
+
+  if (phase.kind === "error") {
+    return (
+      <main className="flex min-h-screen flex-col items-center justify-center px-6 py-12 text-center">
+        <p className="mb-4 text-xl text-destructive">
+          Couldn&apos;t load the active room.
+        </p>
+        <p className="text-sm text-muted-foreground">{phase.message}</p>
+      </main>
+    );
+  }
+
+  // No active room — clean guest-facing copy, no admin link.
   return (
     <main className="flex min-h-screen flex-col items-center justify-center px-6 py-12">
-      <div className="max-w-md w-full text-center space-y-10 animate-fade-in">
-        {/* Logo + wordmark */}
-        <div className="space-y-6">
-          <div className="flex justify-center">
-            <Logo size={112} className="emx-glow-pink" />
-          </div>
-          <div className="space-y-2">
-            {/*
-              Mobile-first responsive sizing: "eurovisionmaxxing" is a single
-              17-char unbreakable word, so at text-5xl extrabold (~48px) it
-              overflows iPhone SE's ~327px usable width. Scale up with the
-              viewport. `break-words` is a safety net for edge-case narrow
-              screens — the gradient will clip to each resulting line if it
-              ever needs to wrap.
-            */}
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight emx-wordmark text-balance leading-tight break-words">
-              {t("app.name")}
-            </h1>
-            <p className="text-lg sm:text-xl font-semibold text-foreground text-balance">
-              {t("app.tagline")}
-            </p>
-            <p className="text-muted-foreground text-base sm:text-lg leading-relaxed text-balance pt-1">
-              {t("app.description")}
-            </p>
-          </div>
-        </div>
-
-        {/* CTAs */}
-        <div className="space-y-4">
-          <Link
-            href="/create"
-            className="block w-full rounded-xl bg-primary px-6 py-4 text-lg font-semibold text-primary-foreground text-center transition-all duration-200 hover:scale-[1.02] hover:emx-glow-gold active:scale-[0.98]"
-          >
-            {t("cta.startRoom")}
-          </Link>
-          <Link
-            href="/join"
-            className="block w-full rounded-xl border-2 border-border px-6 py-4 text-lg font-semibold text-foreground text-center transition-all duration-200 hover:scale-[1.02] hover:border-accent hover:emx-glow-pink active:scale-[0.98]"
-          >
-            {t("cta.joinRoom")}
-          </Link>
-        </div>
-
-        {/* Micro-meta strip */}
-        <p className="text-sm text-muted-foreground">
-          {t("app.featuresLine")}
+      <div className="max-w-md text-center">
+        <h1 className="mb-3 text-3xl font-bold">Waiting for the show…</h1>
+        <p className="text-muted-foreground">
+          Hang tight — this page will jump you in as soon as the show
+          starts.
         </p>
       </div>
     </main>

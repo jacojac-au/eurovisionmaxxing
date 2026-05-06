@@ -9,7 +9,7 @@ import PresentScreen, {
   type PresentStatus,
 } from "@/components/present/PresentScreen";
 import FullscreenPrompt from "@/components/present/FullscreenPrompt";
-import type { Contestant } from "@/types";
+import type { Contestant, VotingCategory } from "@/types";
 import type { LeaderboardEntry } from "@/lib/results/formatRoomSummary";
 
 interface RoomShape {
@@ -19,6 +19,23 @@ interface RoomShape {
   ownerUserId: string;
   announcementMode?: string;
   announcingUserId?: string | null;
+  categories?: VotingCategory[];
+}
+
+interface LiveAggregate {
+  contestantId: string;
+  avgPerCategory: Record<string, number | null>;
+  avgTotal: number | null;
+  submittedCount: number;
+  missedCount: number;
+  totalVoters: number;
+  hotTakesCount: number;
+}
+
+interface LiveSnapshot {
+  nowPerforming: Contestant | null;
+  aggregate: LiveAggregate | null;
+  scoredCounts: Record<string, number>;
 }
 
 interface MembershipShape {
@@ -67,6 +84,7 @@ export default function PresentPage({ params }: { params: { id: string } }) {
   const roomId = params.id;
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [results, setResults] = useState<ResultsShape | null>(null);
+  const [live, setLive] = useState<LiveSnapshot | null>(null);
 
   // Force-dark — restore prior theme on unmount so the user's theme
   // toggle pick is honoured back on /room/{id} or /results/{id}.
@@ -139,10 +157,46 @@ export default function PresentPage({ params }: { params: { id: string } }) {
     };
   }, [phase, roomId]);
 
-  // Status_changed broadcasts trigger an immediate refetch.
+  // While voting, poll /live?all=1 every 2 s for now-performing + aggregate
+  // + scoredCounts. Realtime push (below) re-triggers immediately when an
+  // admin advances the show or a vote lands.
+  const loadLive = useCallback(async () => {
+    try {
+      const res = await fetch(
+        `/api/rooms/${encodeURIComponent(roomId)}/live?all=1`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) return;
+      const body = (await res.json()) as LiveSnapshot;
+      setLive(body);
+    } catch {
+      /* keep stale */
+    }
+  }, [roomId]);
+
+  useEffect(() => {
+    if (phase.kind !== "ready") return;
+    const status = phase.room.status;
+    if (status !== "voting" && status !== "voting_ending") {
+      setLive(null);
+      return;
+    }
+    void loadLive();
+    const id = window.setInterval(loadLive, 2000);
+    return () => window.clearInterval(id);
+  }, [phase, loadLive]);
+
+  // Realtime: status changes refetch the room; live events refetch the live
+  // snapshot for the in-voting view.
   useRoomRealtime(roomId, (event) => {
     if (event.type === "status_changed" || event.type === "voting_ending") {
       void load();
+    }
+    if (
+      event.type === "now_performing" ||
+      event.type === "voting_progress"
+    ) {
+      void loadLive();
     }
   });
 
@@ -174,6 +228,7 @@ export default function PresentPage({ params }: { params: { id: string } }) {
         status={phase.room.status as PresentStatus}
         pin={phase.room.pin}
         contestants={phase.contestants}
+        categories={phase.room.categories ?? []}
         leaderboard={results?.leaderboard}
         announcerDisplayName={announcerDisplayName}
         roomMemberTotal={phase.memberships.length}
@@ -184,6 +239,7 @@ export default function PresentPage({ params }: { params: { id: string } }) {
         }
         announcerPosition={results?.announcement?.announcerPosition}
         announcerCount={results?.announcement?.announcerCount}
+        live={live}
       />
       <FullscreenPrompt />
     </>

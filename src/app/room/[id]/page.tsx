@@ -73,6 +73,8 @@ interface RoomShape {
   announcingUserId?: string | null;
   currentAnnounceIdx?: number | null;
   votingEndsAt?: string | null;
+  nowPerformingId?: string | null;
+  allowNowPerforming?: boolean;
 }
 
 type Phase =
@@ -717,6 +719,8 @@ export default function RoomPage({ params }: { params: { id: string } }) {
           scoredByCounts={scoredByCounts}
           roomMemberTotal={roomMemberTotal}
           roomCompletion={roomCompletion}
+          nowPerformingId={phase.room.nowPerformingId}
+          allowNowPerforming={phase.room.allowNowPerforming}
         />
       </>
     );

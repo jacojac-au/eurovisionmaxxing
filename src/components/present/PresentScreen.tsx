@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
-import type { Contestant } from "@/types";
+import type { Contestant, VotingCategory } from "@/types";
 import type { LeaderboardEntry } from "@/lib/results/formatRoomSummary";
 
 export type PresentStatus =
@@ -13,16 +13,40 @@ export type PresentStatus =
   | "announcing"
   | "done";
 
+interface LiveAggregate {
+  contestantId: string;
+  avgPerCategory: Record<string, number | null>;
+  avgTotal: number | null;
+  submittedCount: number;
+  missedCount: number;
+  totalVoters: number;
+  hotTakesCount: number;
+}
+
+interface LiveSnapshot {
+  nowPerforming: Contestant | null;
+  aggregate: LiveAggregate | null;
+  scoredCounts: Record<string, number>;
+}
+
 interface PresentScreenProps {
   status: PresentStatus;
   pin: string;
   contestants: Contestant[];
+  /** Voting categories — used by the rich voting view to label per-category averages. */
+  categories?: VotingCategory[];
   /** Leaderboard rows. Required when status ∈ {announcing, done}. */
   leaderboard?: LeaderboardEntry[];
   /** Display name of the current announcer (live mode). */
   announcerDisplayName?: string;
   /** Total room members for §8.x progress copy. */
   roomMemberTotal?: number;
+  /**
+   * Live snapshot for the in-voting view (now-performing card, per-category
+   * averages, lineup-status strip). Polled by the parent every 2s and pushed
+   * by Realtime; the view degrades cleanly when null/undefined.
+   */
+  live?: LiveSnapshot | null;
   /**
    * The reveal that's about to happen — pulled from the announcement state
    * exposed by /api/results. Null when the queue is exhausted (transitional);
@@ -64,12 +88,14 @@ export default function PresentScreen({
   status,
   pin,
   contestants,
+  categories = [],
   leaderboard,
   announcerDisplayName,
   roomMemberTotal,
   pendingReveal,
   announcerPosition,
   announcerCount,
+  live,
 }: PresentScreenProps) {
   const t = useTranslations();
   const contestantById = new Map(contestants.map((c) => [c.id, c]));
@@ -101,20 +127,17 @@ export default function PresentScreen({
 
   if (status === "voting" || status === "voting_ending") {
     return (
-      <main
-        data-testid="present-screen"
-        data-status={status}
-        className="flex min-h-screen flex-col items-center justify-center px-12 py-12 text-center"
-      >
-        <p className="text-2xl text-muted-foreground">
-          {t("present.voting.eyebrow")}
-        </p>
-        <p className="mt-6 text-7xl font-bold motion-safe:animate-shimmer">
-          {status === "voting_ending"
-            ? t("present.votingEnding.title")
-            : t("present.voting.title")}
-        </p>
-      </main>
+      <PresentVotingView
+        status={status}
+        pin={pin}
+        contestants={contestants}
+        categories={categories}
+        live={live ?? null}
+        roomMemberTotal={roomMemberTotal}
+        eyebrow={t("present.voting.eyebrow")}
+        endingTitle={t("present.votingEnding.title")}
+        votingTitle={t("present.voting.title")}
+      />
     );
   }
 
@@ -342,6 +365,168 @@ function PresentLeaderboard({
           );
         })}
       </ol>
+    </main>
+  );
+}
+
+// ─── Rich voting view ────────────────────────────────────────────────────────
+
+interface PresentVotingViewProps {
+  status: "voting" | "voting_ending";
+  pin: string;
+  contestants: Contestant[];
+  categories: VotingCategory[];
+  live: LiveSnapshot | null;
+  roomMemberTotal?: number;
+  eyebrow: string;
+  votingTitle: string;
+  endingTitle: string;
+}
+
+function PresentVotingView({
+  status,
+  pin,
+  contestants,
+  categories,
+  live,
+  roomMemberTotal,
+  eyebrow,
+  votingTitle,
+  endingTitle,
+}: PresentVotingViewProps) {
+  const sortedContestants = [...contestants].sort(
+    (a, b) => a.runningOrder - b.runningOrder
+  );
+  const nowPerforming = live?.nowPerforming ?? null;
+  const aggregate = live?.aggregate ?? null;
+  const scoredCounts = live?.scoredCounts ?? {};
+
+  // No contestant set yet — fall back to the eyebrow + animated title plus
+  // a small PIN reminder so the room can still tell where to join.
+  if (!nowPerforming) {
+    return (
+      <main
+        data-testid="present-screen"
+        data-status={status}
+        className="flex min-h-screen flex-col items-center justify-center px-12 py-12 text-center"
+      >
+        <p className="text-2xl text-muted-foreground">{eyebrow}</p>
+        <p className="mt-6 text-7xl font-bold motion-safe:animate-shimmer">
+          {status === "voting_ending" ? endingTitle : votingTitle}
+        </p>
+        <p className="mt-12 text-xs uppercase tracking-[0.5em] text-muted-foreground">
+          Room PIN
+        </p>
+        <p className="mt-2 font-mono text-6xl font-bold tracking-[0.4em]">
+          {pin}
+        </p>
+      </main>
+    );
+  }
+
+  const avgTotal = aggregate?.avgTotal ?? null;
+  const submitted = aggregate?.submittedCount ?? 0;
+  const totalVoters = aggregate?.totalVoters ?? roomMemberTotal ?? 0;
+  const missed = aggregate?.missedCount ?? 0;
+
+  return (
+    <main
+      data-testid="present-screen"
+      data-status={status}
+      className="flex min-h-screen flex-col px-12 py-10"
+    >
+      {/* Now-performing banner */}
+      <section className="flex items-center gap-10 rounded-2xl border border-white/10 bg-white/5 p-10">
+        <span className="text-[12rem] leading-none" aria-hidden="true">
+          {nowPerforming.flagEmoji}
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <span className="text-2xl uppercase tracking-[0.4em] text-muted-foreground">
+            #{nowPerforming.runningOrder} — Now performing
+          </span>
+          <span className="mt-2 truncate text-7xl font-extrabold">
+            {nowPerforming.country}
+          </span>
+          <span className="mt-2 truncate text-3xl font-semibold opacity-90">
+            {nowPerforming.song}
+          </span>
+          <span className="mt-1 truncate text-2xl opacity-70">
+            {nowPerforming.artist}
+          </span>
+        </div>
+        <div className="flex flex-col items-end">
+          <span className="text-xs uppercase tracking-[0.4em] text-muted-foreground">
+            Live avg
+          </span>
+          <span className="text-9xl font-extrabold tabular-nums">
+            {avgTotal === null ? "—" : avgTotal.toFixed(1)}
+          </span>
+          <span className="text-xl text-muted-foreground tabular-nums">
+            {submitted}/{totalVoters} voted
+            {missed > 0 ? ` · ${missed} missed` : ""}
+          </span>
+        </div>
+      </section>
+
+      {/* Per-category averages */}
+      {categories.length > 0 && aggregate && (
+        <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
+          {categories.map((cat) => {
+            const v = aggregate.avgPerCategory[cat.name];
+            return (
+              <div
+                key={cat.name}
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-3"
+              >
+                <div className="text-sm uppercase tracking-wider text-muted-foreground">
+                  {cat.name}
+                </div>
+                <div className="text-4xl font-bold tabular-nums">
+                  {v === null ? "—" : v.toFixed(1)}
+                </div>
+              </div>
+            );
+          })}
+        </section>
+      )}
+
+      {/* Lineup strip */}
+      <section className="mt-auto pt-8">
+        <h3 className="mb-3 text-sm uppercase tracking-[0.4em] text-muted-foreground">
+          Running order
+        </h3>
+        <div className="grid grid-cols-6 gap-2 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-13">
+          {sortedContestants.map((c) => {
+            const isNow = c.id === nowPerforming.id;
+            const isPast = c.runningOrder < nowPerforming.runningOrder;
+            const scored = scoredCounts[c.id] ?? 0;
+            return (
+              <div
+                key={c.id}
+                className={`relative flex flex-col items-center gap-1 rounded-lg border px-2 py-2 text-center ${
+                  isNow
+                    ? "border-primary bg-primary/15 ring-2 ring-primary"
+                    : isPast
+                    ? "border-white/10 bg-white/5 opacity-60"
+                    : "border-white/10 bg-white/5"
+                }`}
+              >
+                <span className="text-3xl leading-none" aria-hidden="true">
+                  {c.flagEmoji}
+                </span>
+                <span className="text-[10px] tabular-nums opacity-70">
+                  #{c.runningOrder}
+                </span>
+                {scored > 0 && (
+                  <span className="text-[10px] font-bold tabular-nums">
+                    {scored}✓
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </main>
   );
 }
