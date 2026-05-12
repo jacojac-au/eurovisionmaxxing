@@ -227,7 +227,7 @@ export default function AdminControlPage({
           Mark done
         </button>
         <span className="ml-auto self-center text-xs text-muted-foreground">
-          No "pause" — domain only supports the transitions above. End voting →
+          No &ldquo;pause&rdquo; — domain only supports the transitions above. End voting →
           5s undo window → server completes scoring/announcing.
         </span>
       </div>
@@ -433,6 +433,72 @@ function QuickLinks({ roomId }: { roomId: string }) {
     },
   ];
 
+  // Vienna 2026 V3 overlays — drop-in replacements at the same OBS canvas
+  // size as V1/V2 (1920×1080) but with the Vienna 2026 visual language:
+  // deep-navy + gold particle backdrop, heart-clip-path flag chips, white
+  // stadium pills with deep-navy type. All driven by /api/active-room.
+  const v3Overlays: Array<{
+    name: string;
+    url: string;
+    note: string;
+    suggestedSize: string;
+  }> = [
+    {
+      name: "V3 index — all Vienna 2026 overlays",
+      url: generic("/overlay/v3"),
+      note: "Landing page listing every V3 overlay with descriptions.",
+      suggestedSize: "—",
+    },
+    {
+      name: "V3 — Now-performing lower-third",
+      url: generic("/overlay/v3/song"),
+      note: "Centered 1200-wide pill with heart flag chip + artist + song. Transparent bg.",
+      suggestedSize: "1920 × 1080 (full)",
+    },
+    {
+      name: "V3 — Running-order tile",
+      url: generic("/overlay/v3/running-order"),
+      note: "Bottom-right navy-gold pill: big running-order number + country + heart flag chip. Transparent bg.",
+      suggestedSize: "1920 × 1080 (full)",
+    },
+    {
+      name: "V3 — Tonight's Lineup (3-column board)",
+      url: generic("/overlay/v3/all-countries"),
+      note: "Full-screen lineup grid with heart flag chips, gold ring on current performer, »passed for prior runners. ?title= overrides the heading.",
+      suggestedSize: "1920 × 1080 (full)",
+    },
+    {
+      name: "V3 — Voting lower-third (CTA + country)",
+      url: generic("/overlay/v3/voting"),
+      note: "Gold-trimmed navy strip across the bottom with eyebrow + body text on the left and now-performing pill on the right. ?left= and ?body= override the CTA copy.",
+      suggestedSize: "1920 × 1080 (full)",
+    },
+    {
+      name: "V3 — Scorecard (country + score)",
+      url: generic("/overlay/v3/scorecard"),
+      note: "Centered pill: heart flag chip + country, navy tail with computed score. Transparent bg.",
+      suggestedSize: "1920 × 1080 (full)",
+    },
+    {
+      name: "V3 — Final ranking scoreboard",
+      url: generic("/overlay/v3/scoreboard"),
+      note: "Full-screen final/live ranking on the Vienna 2026 backdrop: top-3 podium with gold/silver/bronze tiers, plus a 2-col field for the rest. Driven by /api/results — meaningful in announcing/done.",
+      suggestedSize: "1920 × 1080 (full)",
+    },
+    {
+      name: "V3 — Qualifying split (still / qualified)",
+      url: generic("/overlay/v3/qualifying"),
+      note: "Two-column qualifier board on the gold/navy backdrop. ?spots=10 or ?qualified=AT,SE,FR to override.",
+      suggestedSize: "1920 × 1080 (full)",
+    },
+    {
+      name: "V3 — Big Show poster",
+      url: generic("/overlay/v3/big-show"),
+      note: "Vienna 2026 host-city marketing card. Override per-card with ?c1=AT&n1=Austria&v1=…&d1=… (and c2..c3).",
+      suggestedSize: "1920 × 1080 (full)",
+    },
+  ];
+
   const apis: Array<{ name: string; method: string; url: string; note: string }> = [
     {
       name: "Live snapshot",
@@ -510,6 +576,36 @@ function QuickLinks({ roomId }: { roomId: string }) {
         </p>
         <div className="space-y-2">
           {overlays.map((o) => (
+            <div
+              key={o.name}
+              className="flex flex-col gap-1 rounded border p-3 text-xs"
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <strong className="text-sm">{o.name}</strong>
+                <span className="font-mono text-muted-foreground">
+                  Browser Source: {o.suggestedSize}
+                </span>
+              </div>
+              <code className="break-all text-xs text-muted-foreground">
+                {o.url}
+              </code>
+              <span className="opacity-70">{o.note}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <h3 className="mb-1 text-lg font-semibold">
+          OBS overlays — Vienna 2026 (V3)
+        </h3>
+        <p className="mb-4 text-xs text-muted-foreground">
+          Drop-in replacements at the same 1920×1080 canvas, restyled with
+          the Vienna 2026 brand (deep navy + gold particle backdrop, heart
+          flag chips). All follow the active room.
+        </p>
+        <div className="space-y-2">
+          {v3Overlays.map((o) => (
             <div
               key={o.name}
               className="flex flex-col gap-1 rounded border p-3 text-xs"
